@@ -1,0 +1,195 @@
+---
+title: "Studies_in_MCH"
+author: "Amir A. Seid"
+date: "2025-07-05"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# My first EDA
+
+**This blog is an EDA of Academic litterateurs done in the Racial and Ethnic Disparity in Reproductive Medicine.**
+
+# Prerequisite
+
+```{r}
+library(tidyverse)
+
+article.raw <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2025/2025-02-25/article_dat.csv")
+
+model_dat <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2025/2025-02-25/model_dat.csv")
+
+model_dat <- model_dat %>% mutate(
+       outcome = str_to_sentence(outcome),
+       outcome = str_replace(outcome, "^All-cause death$", "All-cause mortality"))
+
+```
+
+Before starting our analysis, Let me specify my questions to streamline our analysis.
+
+## 1. Studying our studies.
+
+In this section we will attempt to answer this questions
+
+1.  Which journals publish many researches in this matter?
+2.  Where are most of these researches being done?
+3.  Categorically compare which study design were common in our metadata.
+
+### 1.1 Which journals publish many researches in this matter?
+
+We will try to see a time line chart showing the publications each journals have each year.
+
+```{r}
+
+# To streamline the analysis, a sub dataframe from article.raw.
+Description <- article.raw %>% 
+   
+  select(c("pmid", "journal" , "year", "month", "day", "study_location", 13, 14, 15))
+
+
+Analysis <- Description %>% 
+  group_by(journal, year) %>% 
+  summarise(
+    Publications = n(),
+    .groups = "drop"
+  )
+
+labels <- Analysis %>% 
+  filter(year == max(year))
+
+Analysis %>% 
+  ggplot(aes(year, Publications, colour = journal)) +
+  geom_line() +
+  geom_text(
+    data = labels,
+    aes(x = year, y = Publications, label = journal),
+    size = 3, hjust = 1, vjust = 1
+  ) +
+  theme_bw() +
+  labs(
+    x  = "",
+    title = "Number of Publications in Reproductive Health Every Year"
+  ) +
+  scale_x_continuous(
+    expand = c(0, 0), 
+    breaks = seq(min(Analysis$year), max(Analysis$year), by = 1), 
+    limits = c(min(Analysis$year), max(Analysis$year))
+  ) +
+  theme(legend.position = "none")
+  
+  
+
+```
+
+### 1.2 Where are most of these researches being done?
+
+We had a quantitative variable in the previous visualization; on the other hand, we will here see most of the researches were focused: distribution of research papers across location.
+
+Since some of our researches are done in different location, one research paper can be counted more than once. Moreover, many, `r paste0(floor(mean(Description$study_location == "USA", na.rm = T)*100), "%")`, of our papers are general meaning their specified USA as their population.
+
+```{r}
+Description %>% 
+  filter(!study_location %in% c("USA", "Unclear", "N/A")  & !is.na(study_location)) %>% 
+  separate_longer_delim(study_location, delim = ",") %>% 
+  separate_longer_delim(study_location, delim = ".") %>% 
+  mutate(
+    study_location = str_to_upper(study_location),
+    study_location = str_remove_all(study_location, " "),
+  ) %>% 
+  group_by(study_location) %>% 
+  summarise(
+    N = n(),
+    .groups = "drop"
+  ) %>%  
+  filter(!study_location %in% c("CA", "N/A")) %>% 
+  arrange(desc(N)) %>% 
+  mutate(
+    study_location = fct_reorder(study_location, N)
+  ) %>% 
+  ggplot(aes(study_location, N, fill = study_location)) +
+  geom_col() +
+  coord_flip() +
+  theme(legend.position = "none")+
+  scale_y_continuous(breaks = seq(0, 30, 3))
+  
+```
+
+### 1.3 Categorical comparison to see which study design were common in our metadata.
+
+```{r}
+
+Description %>% 
+  mutate(
+    study_type = str_to_sentence(study_type),
+    study_type = str_replace(study_type, "^Rct$", "RCT")
+  ) %>% 
+  filter(!is.na(study_type)) %>% 
+  count(study_type, name = "Number") %>% 
+  mutate(
+    study_type =  fct_reorder(study_type, Number)
+  ) %>% 
+  ggplot(aes(study_type, Number, fill = study_type)) +
+  geom_col() +
+  coord_flip() +
+  theme(legend.position = "none")
+```
+
+This can be an insight for an experts could give their opinion in the strength of the research pool we use for our meta analysis. We could say most of our researches are Retrospective cohort. This could bring many biases towards our research. Including Recall bias, and other biases. The medical community standard for evidence based medicine is RCT. Provided that, the nature of the topic makes retrospective cohorts more preferable.
+
+## 2. See the conclusions they have reached.
+
+We will first see what kind of units we use to take measures.
+
+```{r}
+
+Research_outcome <- model_dat %>% 
+     group_by(outcome, measure)  %>% 
+     summarise(
+           n = n(),
+           avg_point = round(mean(point, na.rm = T), 3),
+           avg_lower = round(mean(point, na.rm = T), 3),
+           avg_upper = round(mean(point, na.rm = T), 3),
+        .groups = "drop") %>%
+  arrange(desc(n)) 
+```
+
+We will then prepare a table summarizing the measured values, including the upper and lower bounds, based on each outcome our litterateurs use. By grouping similar papers together, we will try to see the interoperability of the researches and the clinical significance of these findings. I will leave the later for experts as I am not an epidemiologist or clinician.
+
+We can look many things using the dataframe *Research_outcome*. For instance we can learn which Papers to choose and start on our analysis.
+
+I will choose Primary cesarean delivery. I know the upper and lower bound the number of papers I have, it is pretty solid.
+
+```{r}
+Primary_CS <- model_dat %>% 
+  filter(measure == Research_outcome$measure[1] & outcome == Research_outcome$outcome[1] ) %>% 
+  group_by(compare) %>% 
+  summarise(
+      n = n(),
+      avg_point = round(mean(point, na.rm = T), 3),
+           avg_lower = round(mean(point, na.rm = T), 3),
+           avg_upper = round(mean(point, na.rm = T), 3),
+        .groups = "drop") %>% 
+  arrange(desc(n)) 
+
+```
+
+We will conclude our work by comparing the different in outcome between Black and White patients' Primary CS delivery.
+
+```{r}
+model_dat %>% 
+  filter(compare %in% c(Primary_CS$compare[1], Primary_CS$compare[2]) & outcome == Research_outcome$outcome[1] ) %>% 
+ggplot(aes(point))+
+  geom_boxplot()+
+  facet_wrap(~compare)+
+  scale_x_log10()+ 
+  coord_flip()
+```
+
+Therefore, while the mean, based on our summarized table, and the median, which we see from the graph, are nearly equally there is a tail in both sides for the white population. This could mean we need more data to see what is going on.
+
+I hope you have learnt something new from this note. Considering that it has only been three months since I start programming, we are both learning in the process.
+
+Send you big hughes, Amir
+
+Medical Student and Data Science and Research Aspirant.
