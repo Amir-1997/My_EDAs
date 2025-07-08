@@ -4,14 +4,10 @@
   "rmd_files": [
     {
       "name": "My_first_EDA.Rmd",
-      "title": "Studies in Maternal and Child Health",
+      "title": "Studies in MCH",
       "render": "default",
       "description": "An exploratory data analysis on racial and ethnic disparities in reproductive medicine.",
       "author": "Amir A. Seid"
     }
-  ],
-  "packages": ["tidyverse"],
-  "metadata": {
-    "keywords": ["EDA", "Reproductive Health", "Racial Disparity", "R Markdown"]
-  }
+  ]
 }
